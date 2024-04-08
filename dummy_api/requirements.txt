@@ -1,0 +1,2 @@
+# requirements for the dummy Flask webserver
+Flask==3.0.3
