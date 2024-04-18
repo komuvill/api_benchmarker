@@ -35,63 +35,63 @@ func runBenchmark(cmd *cobra.Command, args []string) {
 
 // httpRequest sends an HTTP request and returns the response body as a string, the status code, and an error if any.
 func httpRequest(method, url string, bodyFlag string) (string, int, error) {
-    var body io.Reader
-    var err error
-    var cleanup func()
+	var body io.Reader
+	var err error
+	var cleanup func()
 
-    if method == "POST" || method == "PUT" || method == "PATCH" {
-        body, cleanup, err = getRequestBody(bodyFlag)
-        if err != nil {
-            return "", 0, err
-        }
-        // Defer the cleanup function to close the file when done
-        defer cleanup()
-    }
+	if method == "POST" || method == "PUT" || method == "PATCH" {
+		body, cleanup, err = getRequestBody(bodyFlag)
+		if err != nil {
+			return "", 0, err
+		}
+		// Defer the cleanup function to close the file when done
+		defer cleanup()
+	}
 
-    req, err := http.NewRequest(method, url, body)
-    if err != nil {
-        return "", 0, fmt.Errorf("error creating request: %v", err)
-    }
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return "", 0, fmt.Errorf("error creating request: %v", err)
+	}
 
-    // Set the Content-Type header if there is a body.
+	// Set the Content-Type header if there is a body.
 	// For purpose of the project, assume the API to be tested expects json requests.
-    if body != nil {
-        req.Header.Set("Content-Type", "application/json")
-    }
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
-    client := &http.Client{}
-    resp, err := client.Do(req)
-    if err != nil {
-        return "", 0, fmt.Errorf("error making request: %v", err)
-    }
-    defer resp.Body.Close()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("error making request: %v", err)
+	}
+	defer resp.Body.Close()
 
-    respBody, err := ioutil.ReadAll(resp.Body)
-    if err != nil {
-        return "", resp.StatusCode, fmt.Errorf("error reading response body: %v", err)
-    }
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", resp.StatusCode, fmt.Errorf("error reading response body: %v", err)
+	}
 
-    return string(respBody), resp.StatusCode, nil
+	return string(respBody), resp.StatusCode, nil
 }
 
 // getRequestBody handles the retrieval of the request body.
 // It checks if the body is provided as a raw string or a file path.
 func getRequestBody(bodyFlag string) (io.Reader, func(), error) {
-    if strings.HasPrefix(bodyFlag, "@") {
-        filePath := strings.TrimPrefix(bodyFlag, "@")
-        file, err := os.Open(filePath)
-        if err != nil {
-            return nil, nil, fmt.Errorf("error opening file: %v", err)
-        }
-        
-        // Return the file and a cleanup function that closes the file
-        return file, func() {
-            file.Close()
-        }, nil
-    }
-    
-    // For raw string bodies, no cleanup is needed, so we return a no-op function
-    return strings.NewReader(bodyFlag), func() {}, nil
+	if strings.HasPrefix(bodyFlag, "@") {
+		filePath := strings.TrimPrefix(bodyFlag, "@")
+		file, err := os.Open(filePath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error opening file: %v", err)
+		}
+
+		// Return the file and a cleanup function that closes the file
+		return file, func() {
+			file.Close()
+		}, nil
+	}
+
+	// For raw string bodies, no cleanup is needed, so we return a no-op function
+	return strings.NewReader(bodyFlag), func() {}, nil
 }
 
 func validateFlags(cmd *cobra.Command, args []string) error {
