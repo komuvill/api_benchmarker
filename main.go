@@ -32,16 +32,6 @@ type RequestResult struct {
 func runBenchmark(config *BenchmarkConfig) {
 	fmt.Printf("Benchmarking %s with %s method, %d requests, %d concurrent requests, for %d seconds\n", config.URL, config.Method, config.Requests, config.Concurrency, config.Duration)
 
-	requestBody, cleanup, err := getRequestBody(config.Body)
-	if err != nil {
-		fmt.Printf("Error getting request body: %v\n", err)
-		return
-	}
-	// If there's a cleanup function, defer its execution
-	if cleanup != nil {
-		defer cleanup()
-	}
-
 	// Create channels for controlling concurrency and collecting results
 	concurrencySemaphore := make(chan struct{}, config.Concurrency)
 	resultsChan := make(chan RequestResult, config.Requests)
@@ -58,6 +48,22 @@ func runBenchmark(config *BenchmarkConfig) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
+			// Create a new reader for each request inside the goroutine
+			var requestBody io.Reader
+			var err error
+			if config.Body != "" {
+				requestBody, _, err = getRequestBody(config.Body)
+				if err != nil {
+					resultsChan <- RequestResult{
+						Response:     "Failed to construct request body",
+						StatusCode:   0,
+						ResponseTime: 0,
+						Error:        err,
+					}
+					return
+				}
+			}
 
 			select {
 			case concurrencySemaphore <- struct{}{}:
