@@ -87,7 +87,7 @@ func runBenchmark(config *BenchmarkConfig) {
 				// If the timer has expired, stop making new requests
 				return
 			}
-		}()
+		}(i)
 	}
 
 	// Close the results channel when all workers are done
