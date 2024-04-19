@@ -220,8 +220,8 @@ func main() {
 
 	rootCmd.PersistentFlags().StringVarP(&config.URL, "url", "u", "", "The URL of the API endpoint to benchmark.")
 	rootCmd.PersistentFlags().StringVarP(&config.Method, "method", "m", "GET", "The HTTP method to use.")
-	rootCmd.PersistentFlags().IntVarP(&config.Requests, "requests", "r", 100, "The number of requests to perform.")
-	rootCmd.PersistentFlags().IntVarP(&config.Concurrency, "concurrency", "c", 10, "The level of concurrency for the requests.")
+	rootCmd.PersistentFlags().IntVarP(&config.Requests, "requests", "r", 10000, "The number of requests to perform.")
+	rootCmd.PersistentFlags().IntVarP(&config.Concurrency, "concurrency", "c", 1000, "The level of concurrency for the requests.")
 	rootCmd.PersistentFlags().IntVarP(&config.Duration, "duration", "d", 10, "The duration of the test in seconds.")
 	rootCmd.PersistentFlags().StringVarP(&config.Body, "body", "b", "", "The request body for POST/PUT requests. Prefix with @ to point to a file")
 
