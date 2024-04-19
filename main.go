@@ -46,7 +46,7 @@ func runBenchmark(config *BenchmarkConfig) {
 	// Start the worker goroutines
 	for i := 0; i < config.Requests; i++ {
 		wg.Add(1)
-		go func() {
+		go func(i int) {
 			defer wg.Done()
 
 			// Create a new reader for each request inside the goroutine
