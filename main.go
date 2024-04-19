@@ -1,28 +1,40 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
 
-func runBenchmark(cmd *cobra.Command, args []string) {
-	// Retrieve the flag values
-	url, _ := cmd.Flags().GetString("url")
-	method, _ := cmd.Flags().GetString("method")
-	requests, _ := cmd.Flags().GetInt("requests")
-	concurrency, _ := cmd.Flags().GetInt("concurrency")
-	duration, _ := cmd.Flags().GetInt("duration")
-	body, _ := cmd.Flags().GetString("body")
+type BenchmarkConfig struct {
+	URL         string
+	Method      string
+	Requests    int
+	Concurrency int
+	Duration    int
+	Body        string
+}
 
-	fmt.Printf("Benchmarking %s with %s method, %d requests, %d concurrent requests, for %d seconds\n", url, method, requests, concurrency, duration)
+func runBenchmark(config *BenchmarkConfig) {
+	fmt.Printf("Benchmarking %s with %s method, %d requests, %d concurrent requests, for %d seconds\n", config.URL, config.Method, config.Requests, config.Concurrency, config.Duration)
 
-	responseBody, statusCode, err := httpRequest(method, url, body)
+	requestBody, cleanup, err := getRequestBody(config.Body)
+	if err != nil {
+		fmt.Printf("Error getting request body: %v\n", err)
+		return
+	}
+	// If there's a cleanup function, defer its execution
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	responseBody, statusCode, err := httpRequest(config.Method, config.URL, requestBody)
 
 	if err != nil {
 		fmt.Printf("%v\n", err)
@@ -34,39 +46,37 @@ func runBenchmark(cmd *cobra.Command, args []string) {
 }
 
 // httpRequest sends an HTTP request and returns the response body as a string, the status code, and an error if any.
-func httpRequest(method, url string, bodyFlag string) (string, int, error) {
-	var body io.Reader
-	var err error
-	var cleanup func()
+func httpRequest(method, url string, body io.Reader) (string, int, error) {
+	// Create a context with a timeout to allow for request cancellation
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	if method == "POST" || method == "PUT" || method == "PATCH" {
-		body, cleanup, err = getRequestBody(bodyFlag)
-		if err != nil {
-			return "", 0, err
-		}
-		// Defer the cleanup function to close the file when done
-		defer cleanup()
-	}
-
-	req, err := http.NewRequest(method, url, body)
+	// Create a new HTTP request with the context
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return "", 0, fmt.Errorf("error creating request: %v", err)
 	}
 
 	// Set the Content-Type header if there is a body.
-	// For purpose of the project, assume the API to be tested expects json requests.
+	// For the purpose of the project, assume the API to be tested expects JSON requests.
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{}
+	// Create an HTTP client with timeout settings
+	client := &http.Client{
+		Timeout: time.Second * 30, // Optionally set a timeout for the client
+	}
+
+	// Make the HTTP request
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", 0, fmt.Errorf("error making request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	// Read the response body
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", resp.StatusCode, fmt.Errorf("error reading response body: %v", err)
 	}
@@ -94,22 +104,13 @@ func getRequestBody(bodyFlag string) (io.Reader, func(), error) {
 	return strings.NewReader(bodyFlag), func() {}, nil
 }
 
-func validateFlags(cmd *cobra.Command, args []string) error {
-
-	url, err := cmd.Flags().GetString("url")
-	if err != nil {
-		return err
-	}
-
-	if url == "" {
+func validateFlags(config *BenchmarkConfig) error {
+	// Validate URL
+	if config.URL == "" {
 		return fmt.Errorf("URL is required")
 	}
 
-	method, err := cmd.Flags().GetString("method")
-	if err != nil {
-		return err
-	}
-
+	// Validate Method
 	validMethods := map[string]bool{
 		"GET":    true,
 		"POST":   true,
@@ -117,25 +118,20 @@ func validateFlags(cmd *cobra.Command, args []string) error {
 		"DELETE": true,
 	}
 
-	if _, valid := validMethods[method]; !valid {
-		return fmt.Errorf("'%s' is not a valid HTTP method. Following HTTP methods are supported: GET, POST, PUT, DELETE", method)
+	if _, valid := validMethods[config.Method]; !valid {
+		return fmt.Errorf("'%s' is not a valid HTTP method. Supported methods are: GET, POST, PUT, DELETE", config.Method)
 	}
 
-	body, err := cmd.Flags().GetString("body")
-	if err != nil {
-		return err
-	}
-
-	if method == "POST" || method == "PUT" {
-		if body == "" {
-			return fmt.Errorf("a request body is required for the %s method", method)
+	// Validate Body
+	if config.Method == "POST" || config.Method == "PUT" || config.Method == "PATCH" {
+		if config.Body == "" {
+			return fmt.Errorf("a request body is required for the %s method", config.Method)
 		}
-	}
-
-	if strings.HasPrefix(body, "@") {
-		filePath := strings.TrimPrefix(body, "@")
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			return fmt.Errorf("the file specified for the request body does not exist: %s", filePath)
+		if strings.HasPrefix(config.Body, "@") {
+			filePath := strings.TrimPrefix(config.Body, "@")
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				return fmt.Errorf("the file specified for the request body does not exist: %s", filePath)
+			}
 		}
 	}
 
@@ -143,30 +139,27 @@ func validateFlags(cmd *cobra.Command, args []string) error {
 }
 
 func main() {
+	var config BenchmarkConfig
+
 	var rootCmd = &cobra.Command{
 		Use:   "api_benchmarker",
 		Short: "api_benchmarker is a CLI tool for benchmarking REST APIs",
 		Long:  "A Fast and Flexible API benchmarking tool built with help from GPT-4",
-		Run:   runBenchmark,
+		Run: func(cmd *cobra.Command, args []string) {
+			runBenchmark(&config) // Pass the config pointer to runBenchmark
+		},
 	}
 
-	var (
-		url         string
-		method      string
-		requests    int
-		concurrency int
-		duration    int
-		body        string
-	)
+	rootCmd.PersistentFlags().StringVarP(&config.URL, "url", "u", "", "The URL of the API endpoint to benchmark.")
+	rootCmd.PersistentFlags().StringVarP(&config.Method, "method", "m", "GET", "The HTTP method to use.")
+	rootCmd.PersistentFlags().IntVarP(&config.Requests, "requests", "r", 100, "The number of requests to perform.")
+	rootCmd.PersistentFlags().IntVarP(&config.Concurrency, "concurrency", "c", 10, "The level of concurrency for the requests.")
+	rootCmd.PersistentFlags().IntVarP(&config.Duration, "duration", "d", 10, "The duration of the test in seconds.")
+	rootCmd.PersistentFlags().StringVarP(&config.Body, "body", "b", "", "The request body for POST/PUT requests. Prefix with @ to point to a file")
 
-	rootCmd.PersistentFlags().StringVarP(&url, "url", "u", "", "The URL of the API endpoint to benchmark.")
-	rootCmd.PersistentFlags().StringVarP(&method, "method", "m", "GET", "The HTTP method to use.")
-	rootCmd.PersistentFlags().IntVarP(&requests, "requests", "r", 100, "The number of requests to perform.")
-	rootCmd.PersistentFlags().IntVarP(&concurrency, "concurrency", "c", 10, "The level of concurrency for the requests.")
-	rootCmd.PersistentFlags().IntVarP(&duration, "duration", "d", 10, "The duration of the test in seconds.")
-	rootCmd.PersistentFlags().StringVarP(&body, "body", "b", "", "The request body for POST/PUT requests. Prefix with @ to point to a file")
-
-	rootCmd.PreRunE = validateFlags
+	rootCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		return validateFlags(&config)
+	}
 
 	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {
