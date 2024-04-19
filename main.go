@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,6 +20,13 @@ type BenchmarkConfig struct {
 	Concurrency int
 	Duration    int
 	Body        string
+}
+
+type RequestResult struct {
+	Response     string
+	StatusCode   int
+	ResponseTime time.Duration
+	Error        error
 }
 
 func runBenchmark(config *BenchmarkConfig) {
@@ -34,15 +42,69 @@ func runBenchmark(config *BenchmarkConfig) {
 		defer cleanup()
 	}
 
-	responseBody, statusCode, err := httpRequest(config.Method, config.URL, requestBody)
+	// Create channels for controlling concurrency and collecting results
+	concurrencySemaphore := make(chan struct{}, config.Concurrency)
+	resultsChan := make(chan RequestResult, config.Requests)
 
-	if err != nil {
-		fmt.Printf("%v\n", err)
-		return
+	// Create a WaitGroup to wait for all goroutines to finish
+	var wg sync.WaitGroup
+
+	// Start a timer for the duration of the test
+	testDuration := time.Duration(config.Duration) * time.Second
+	timer := time.NewTimer(testDuration)
+
+	// Start the worker goroutines
+	for i := 0; i < config.Requests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			select {
+			case concurrencySemaphore <- struct{}{}:
+				// This blocks if concurrency limit is reached
+				startTime := time.Now()
+				// Perform the HTTP request here and capture the result...
+				responseBody, statusCode, err := httpRequest(config.Method, config.URL, requestBody)
+				responseTime := time.Since(startTime)
+
+				// Send the result to the results channel
+				resultsChan <- RequestResult{
+					Response:     responseBody,
+					StatusCode:   statusCode,
+					ResponseTime: responseTime,
+					Error:        err,
+				}
+
+				// Release the concurrency semaphore
+				<-concurrencySemaphore
+			case <-timer.C:
+				// If the timer has expired, stop making new requests
+				return
+			}
+		}()
 	}
 
-	fmt.Printf("Response Status Code: %d\n", statusCode)
-	fmt.Printf("Response Body: %s\n", responseBody)
+	// Close the results channel when all workers are done
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect the results
+	var results []RequestResult
+	for result := range resultsChan {
+		results = append(results, result)
+	}
+
+	// Calculate and print the aggregate metrics
+	calculateAndPrintMetrics(results)
+}
+
+func calculateAndPrintMetrics(results []RequestResult) {
+    // Iterate through the results and print each one
+    for _, result := range results {
+        fmt.Printf("Result: %+v\n", result)
+    }
 }
 
 // httpRequest sends an HTTP request and returns the response body as a string, the status code, and an error if any.
