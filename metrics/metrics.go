@@ -21,7 +21,7 @@ type AggregateMetrics struct {
 	AverageResponse   time.Duration
 	MinResponse       time.Duration
 	MaxResponse       time.Duration
-	TotalResponseTime time.Duration
+	TotalResponseTime time.Duration // for calculating average response time
 }
 
 func NewAggregateMetrics() *AggregateMetrics {
