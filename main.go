@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/komuvill/api_benchmarker/metrics"
 	"github.com/komuvill/api_benchmarker/benchmark"
+	"github.com/komuvill/api_benchmarker/storage"
 )
 
 func validateFlags(config *benchmark.BenchmarkConfig) error {
@@ -55,6 +56,11 @@ func main() {
 			results := benchmark.RunBenchmark(&config)
 			aggregatedMetrics := metrics.CalculateMetrics(results)
 			metrics.PrintMetrics(aggregatedMetrics)
+			outputDir := "./output"
+			os.MkdirAll(outputDir, os.ModePerm)
+			storage.SaveResults(results, outputDir)
+			storage.SaveAggregatedMetrics(aggregatedMetrics, outputDir)
+
 		},
 	}
 
