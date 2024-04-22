@@ -7,6 +7,7 @@ import (
 )
 
 type RequestResult struct {
+	RequestID	int
 	Response     string
 	StatusCode   int
 	ResponseTime time.Duration

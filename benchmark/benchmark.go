@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/komuvill/api_benchmarker/metrics"
 	"github.com/komuvill/api_benchmarker/httpclient"
+	"github.com/komuvill/api_benchmarker/metrics"
 )
 
 type BenchmarkConfig struct {
@@ -30,7 +30,6 @@ func RunBenchmark(config *BenchmarkConfig) []metrics.RequestResult {
 	return allResults
 }
 
-
 func startWorkers(config *BenchmarkConfig, results chan<- metrics.RequestResult) {
 	var wg sync.WaitGroup
 	concurrencySemaphore := make(chan struct{}, config.Concurrency)
@@ -48,6 +47,7 @@ func startWorkers(config *BenchmarkConfig, results chan<- metrics.RequestResult)
 				requestBody, _, err = httpclient.GetRequestBody(config.Body)
 				if err != nil {
 					results <- metrics.RequestResult{
+						RequestID:    i,
 						Response:     "Failed to construct request body",
 						StatusCode:   0,
 						ResponseTime: 0,
@@ -67,6 +67,7 @@ func startWorkers(config *BenchmarkConfig, results chan<- metrics.RequestResult)
 
 				// Send the result to the results channel
 				results <- metrics.RequestResult{
+					RequestID:    i,
 					Response:     responseBody,
 					StatusCode:   statusCode,
 					ResponseTime: responseTime,
