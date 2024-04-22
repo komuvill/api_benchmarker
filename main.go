@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -29,6 +30,19 @@ type RequestResult struct {
 	Error        error
 }
 
+type AggregateMetrics struct {
+	TotalRequests     int
+	FailedRequests    int
+	SuccessRequests   int
+	SuccessRate       float64
+	AverageResponse   time.Duration
+	MinResponse       time.Duration
+	MaxResponse       time.Duration
+	TotalResponseTime time.Duration
+}
+
+var allResults []RequestResult
+
 func runBenchmark(config *BenchmarkConfig) {
 	fmt.Printf("Benchmarking %s with %s method, %d requests, %d concurrent requests, for %d seconds\n", config.URL, config.Method, config.Requests, config.Concurrency, config.Duration)
 
@@ -39,6 +53,9 @@ func runBenchmark(config *BenchmarkConfig) {
 	go collectResults(results, done)
 
 	<-done // Wait for the results processing to complete
+
+	metrics := calculateMetrics(allResults) // allResults should be populated by the collectResults function
+	printMetrics(metrics)
 }
 
 func startWorkers(config *BenchmarkConfig, results chan<- RequestResult) {
@@ -98,19 +115,67 @@ func startWorkers(config *BenchmarkConfig, results chan<- RequestResult) {
 }
 
 func collectResults(results <-chan RequestResult, done chan<- struct{}) {
-	var allResults []RequestResult
 	for result := range results {
 		allResults = append(allResults, result)
 	}
-	calculateAndPrintMetrics(allResults)
 	close(done)
 }
 
-func calculateAndPrintMetrics(results []RequestResult) {
-	// Iterate through the results and print each one
-	for _, result := range results {
-		fmt.Printf("Result: %+v\n", result)
+func newAggregateMetrics() *AggregateMetrics {
+	return &AggregateMetrics{
+		MinResponse: time.Duration(math.MaxInt64), // Initialize with the maximum possible value
+		MaxResponse: time.Duration(0),             // Initialize with zero
 	}
+}
+
+func calculateMetrics(results []RequestResult) AggregateMetrics {
+	metrics := newAggregateMetrics()
+
+	for _, result := range results {
+		metrics.TotalRequests++
+
+		if result.Error != nil || result.StatusCode < 200 || result.StatusCode >= 300 {
+			metrics.FailedRequests++
+		} else {
+			// Only successful requests are considered for these metrics
+			metrics.SuccessRequests++
+			metrics.TotalResponseTime += result.ResponseTime
+
+			if result.ResponseTime < metrics.MinResponse {
+				metrics.MinResponse = result.ResponseTime
+			}
+			if result.ResponseTime > metrics.MaxResponse {
+				metrics.MaxResponse = result.ResponseTime
+			}
+		}
+	}
+
+	// Calculate the average response time for successful requests
+	if metrics.SuccessRequests > 0 {
+		metrics.AverageResponse = metrics.TotalResponseTime / time.Duration(metrics.SuccessRequests)
+	}
+
+	// Calculate the success rate
+	if metrics.TotalRequests > 0 {
+		metrics.SuccessRate = (float64(metrics.SuccessRequests) / float64(metrics.TotalRequests)) * 100
+	}
+
+	// Reset MinResponse if no successful requests were recorded
+	if metrics.MinResponse == time.Duration(math.MaxInt64) {
+		metrics.MinResponse = 0
+	}
+
+	return *metrics
+}
+
+func printMetrics(metrics AggregateMetrics) {
+	fmt.Printf("Total Requests: %d\n", metrics.TotalRequests)
+	fmt.Printf("Successful Requests: %d\n", metrics.SuccessRequests)
+	fmt.Printf("Failed Requests: %d\n", metrics.FailedRequests)
+	fmt.Printf("Success Rate: %.2f%%\n", metrics.SuccessRate)
+	fmt.Printf("Average Response Time: %s\n", metrics.AverageResponse)
+	fmt.Printf("Minimum Response Time: %s\n", metrics.MinResponse)
+	fmt.Printf("Maximum Response Time: %s\n", metrics.MaxResponse)
 }
 
 // httpRequest sends an HTTP request and returns the response body as a string, the status code, and an error if any.
