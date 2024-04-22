@@ -32,30 +32,32 @@ type RequestResult struct {
 func runBenchmark(config *BenchmarkConfig) {
 	fmt.Printf("Benchmarking %s with %s method, %d requests, %d concurrent requests, for %d seconds\n", config.URL, config.Method, config.Requests, config.Concurrency, config.Duration)
 
-	// Create channels for controlling concurrency and collecting results
-	concurrencySemaphore := make(chan struct{}, config.Concurrency)
-	resultsChan := make(chan RequestResult, config.Requests)
+	results := make(chan RequestResult, config.Requests)
+	done := make(chan struct{})
 
-	// Create a WaitGroup to wait for all goroutines to finish
+	go startWorkers(config, results)
+	go collectResults(results, done)
+
+	<-done // Wait for the results processing to complete
+}
+
+func startWorkers(config *BenchmarkConfig, results chan<- RequestResult) {
 	var wg sync.WaitGroup
-
-	// Start a timer for the duration of the test
+	concurrencySemaphore := make(chan struct{}, config.Concurrency)
 	testDuration := time.Duration(config.Duration) * time.Second
 	timer := time.NewTimer(testDuration)
 
-	// Start the worker goroutines
 	for i := 0; i < config.Requests; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-
 			// Create a new reader for each request inside the goroutine
 			var requestBody io.Reader
 			var err error
 			if config.Body != "" {
 				requestBody, _, err = getRequestBody(config.Body)
 				if err != nil {
-					resultsChan <- RequestResult{
+					results <- RequestResult{
 						Response:     "Failed to construct request body",
 						StatusCode:   0,
 						ResponseTime: 0,
@@ -74,7 +76,7 @@ func runBenchmark(config *BenchmarkConfig) {
 				responseTime := time.Since(startTime)
 
 				// Send the result to the results channel
-				resultsChan <- RequestResult{
+				results <- RequestResult{
 					Response:     responseBody,
 					StatusCode:   statusCode,
 					ResponseTime: responseTime,
@@ -90,27 +92,25 @@ func runBenchmark(config *BenchmarkConfig) {
 		}(i)
 	}
 
-	// Close the results channel when all workers are done
-	go func() {
-		wg.Wait()
-		close(resultsChan)
-	}()
+	wg.Wait()
+	close(results)
+	timer.Stop()
+}
 
-	// Collect the results
-	var results []RequestResult
-	for result := range resultsChan {
-		results = append(results, result)
+func collectResults(results <-chan RequestResult, done chan<- struct{}) {
+	var allResults []RequestResult
+	for result := range results {
+		allResults = append(allResults, result)
 	}
-
-	// Calculate and print the aggregate metrics
-	calculateAndPrintMetrics(results)
+	calculateAndPrintMetrics(allResults)
+	close(done)
 }
 
 func calculateAndPrintMetrics(results []RequestResult) {
-    // Iterate through the results and print each one
-    for _, result := range results {
-        fmt.Printf("Result: %+v\n", result)
-    }
+	// Iterate through the results and print each one
+	for _, result := range results {
+		fmt.Printf("Result: %+v\n", result)
+	}
 }
 
 // httpRequest sends an HTTP request and returns the response body as a string, the status code, and an error if any.
