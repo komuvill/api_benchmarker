@@ -10,10 +10,9 @@ import (
 	"github.com/komuvill/api_benchmarker/metrics"
 )
 
-// SaveResults serializes the slice of RequestResults to JSON and saves it to a file.
 // generateTimestampedFilename creates a filename with a timestamp.
 func generateTimestampedFilename(prefix string) string {
-	timestamp := time.Now().Format("01022006-150405") // DDMMYYYY-HHMMSS format
+	timestamp := time.Now().Format("020106-150405") // DDMMYY-HHMMSS format
 	return fmt.Sprintf("%s-%s.json", prefix, timestamp)
 }
 
