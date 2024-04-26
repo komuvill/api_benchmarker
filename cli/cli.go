@@ -24,11 +24,11 @@ func NewRootCmd(config *benchmark.BenchmarkConfig) *cobra.Command {
 	}
 
 	rootCmd.PersistentFlags().StringVarP(&config.URL, "url", "u", "", "The URL of the API endpoint to benchmark.")
-	rootCmd.PersistentFlags().StringVarP(&config.Method, "method", "m", "GET", "The HTTP method to use.")
+	rootCmd.PersistentFlags().StringVarP(&config.Method, "method", "m", "GET", "The HTTP method to use. Accepted methods: GET, POST, PUT, DELETE")
 	rootCmd.PersistentFlags().IntVarP(&config.Requests, "requests", "r", 10000, "The number of requests to perform.")
 	rootCmd.PersistentFlags().IntVarP(&config.Concurrency, "concurrency", "c", 1000, "The level of concurrency for the requests.")
 	rootCmd.PersistentFlags().IntVarP(&config.Duration, "duration", "d", 10, "The duration of the test in seconds.")
-	rootCmd.PersistentFlags().StringVarP(&config.Body, "body", "b", "", "The request body for POST/PUT requests. Prefix with @ to point to a file")
+	rootCmd.PersistentFlags().StringVarP(&config.Body, "body", "b", "", "The request body for POST/PUT requests. Prefix with @ to point to a file. Currently only json formatted bodies are accepted")
 
 	rootCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		return validateFlags(config)
