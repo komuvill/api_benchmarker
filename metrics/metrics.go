@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// RequestResult stores results from each individual request
 type RequestResult struct {
 	RequestID	int
 	Response     string
@@ -14,6 +15,7 @@ type RequestResult struct {
 	Error        error
 }
 
+// AggregateMetrics is used for calculating metrics across the whole test
 type AggregateMetrics struct {
 	TotalRequests     int
 	FailedRequests    int
