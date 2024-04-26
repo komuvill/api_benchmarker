@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/komuvill/api_benchmarker/benchmark"
 	"github.com/komuvill/api_benchmarker/metrics"
+	"github.com/komuvill/api_benchmarker/report"
 	"github.com/komuvill/api_benchmarker/storage"
 	"github.com/spf13/cobra"
 )
@@ -17,14 +19,7 @@ func NewRootCmd(config *benchmark.BenchmarkConfig) *cobra.Command {
 		Short: "api_benchmarker is a CLI tool for benchmarking REST APIs",
 		Long:  "A Fast and Flexible API benchmarking tool built with help from GPT-4",
 		Run: func(cmd *cobra.Command, args []string) {
-			results := benchmark.RunBenchmark(config)
-			aggregatedMetrics := metrics.CalculateMetrics(results)
-			metrics.PrintMetrics(aggregatedMetrics)
-			outputDir := "./output"
-			os.MkdirAll(outputDir, os.ModePerm)
-			storage.SaveResults(results, outputDir)
-			storage.SaveAggregatedMetrics(aggregatedMetrics, outputDir)
-
+			executeBenchmark(config)
 		},
 	}
 
@@ -74,4 +69,22 @@ func validateFlags(config *benchmark.BenchmarkConfig) error {
 	}
 
 	return nil
+}
+
+func executeBenchmark(config *benchmark.BenchmarkConfig) {
+	startTime := time.Now()
+	results := benchmark.RunBenchmark(config)
+	aggregatedMetrics := metrics.CalculateMetrics(results)
+	metrics.PrintMetrics(aggregatedMetrics)
+
+	outputDir := "./output"
+	os.MkdirAll(outputDir, os.ModePerm)
+	storage.SaveResults(results, outputDir)
+	storage.SaveAggregatedMetrics(aggregatedMetrics, outputDir)
+
+	err := report.GenerateHTMLReport(*config, aggregatedMetrics, results, startTime, outputDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating HTML report: %v\n", err)
+		os.Exit(1)
+	}
 }
