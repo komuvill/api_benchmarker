@@ -22,7 +22,7 @@ jobs:
 
     - name: Build
       run: |
-        go build -v -o ./bin/api_benchmarker ./...
+        go build -v -o ./bin/api_benchmarker ./cmd/api_benchmarker
         chmod +x ./bin/api_benchmarker
 
     - name: Test
