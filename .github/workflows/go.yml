@@ -38,10 +38,10 @@ jobs:
           go-version: '1.18'
 
       - name: Build
-      run: |
-        mkdir -p ./bin
-        go build -v -o ./bin/api_benchmarker .
-        chmod +x ./bin/api_benchmarker
+        run: |
+          mkdir -p ./bin
+          go build -v -o ./bin/api_benchmarker .
+          chmod +x ./bin/api_benchmarker
 
       - name: Upload binary as an artifact
         uses: actions/upload-artifact@v3
