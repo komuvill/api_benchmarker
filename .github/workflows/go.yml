@@ -3,56 +3,67 @@ name: Go
 on:
   push:
     branches: [ "master" ]
+    tags:
+      - 'v*' # Trigger the workflow when a new tag with a 'v' prefix is pushed
   pull_request:
     branches: [ "master" ]
-  release:
-    types: [created]
 
 jobs:
-
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.18'
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.18'
 
-    - name: Build
-      run: |
-        mkdir -p ./bin
-        go build -v -o ./bin/api_benchmarker .
-        chmod +x ./bin/api_benchmarker
+      - name: Build
+        run: go build -v ./...
 
-    - name: Test
-      run: go test -v ./...
+      - name: Test
+        run: go test -v ./...
 
-    - name: Upload binary as an artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: api_benchmarker-${{ runner.os }}
-        path: ./bin/api_benchmarker
+  release:
+    if: startsWith(github.ref, 'refs/tags/') # Only run this job if the event is a tag push
+    needs: build-and-test # This job depends on the successful completion of the build-and-test job
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.18'
 
-    - name: Upload Release Asset
-      id: upload-release-asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./bin/api_benchmarker
-        asset_name: api_benchmarker-${{ runner.os }}
-        asset_content_type: application/octet-stream
+      - name: Build
+        run: go build -v -o ./bin/api_benchmarker ./...
+
+      - name: Upload binary as an artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: api_benchmarker-${{ runner.os }}
+          path: ./bin/api_benchmarker
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/api_benchmarker
+          asset_name: api_benchmarker-${{ runner.os }}
+          asset_content_type: application/octet-stream
